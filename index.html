@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendly — Attendance Maker & Interactive Calendar</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter, Plus Jakarta Sans & JetBrains Mono Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
+
+    <!-- Confirmation Modal (Only for explicit user clear/reset actions) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200">
+            <div class="flex items-center gap-3 text-rose-600 mb-3">
+                <div class="p-2 bg-rose-100 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <h3 id="confirm-title" class="text-lg font-bold text-slate-900">Confirm Action</h3>
+            </div>
+            <p id="confirm-message" class="text-sm text-slate-600 mb-6 leading-relaxed">Are you sure?</p>
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Cancel</button>
+                <button type="button" id="confirm-ok-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-xs transition">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Editor Modal (Opens when clicking any date on the calendar) -->
+    <div id="date-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50/70">
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-brand-600">Date Attendance & Notes</span>
+                    <h3 id="modal-date-title" class="font-display text-lg font-extrabold text-slate-900 mt-0.5">Monday, Nov 23, 2026</h3>
+                    <p id="modal-date-iso" class="text-xs font-mono text-slate-400">2026-11-23</p>
+                </div>
+                <button type="button" onclick="closeDateModal()" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition" aria-label="Close">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
+                <!-- Attendance Status Selector -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Attendance Status</label>
+                        <span id="modal-current-badge" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600">Unmarked</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button type="button" onclick="setDateStatus(selectedDateStr, 'present')" id="modal-btn-present" class="modal-status-btn flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border-2 border-slate-200 hover:border-emerald-400 text-xs font-bold text-slate-800 transition">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Present
+                        </button>
+                        <button type="button" onclick="setDateStatus(selectedDateStr, 'absent')" id="modal-btn-absent" class="modal-status-btn flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border-2 border-slate-200 hover:border-rose-400 text-xs font-bold text-slate-800 transition">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Absent
+                        </button>
+                        <button type="button" onclick="setDateStatus(selectedDateStr, 'holiday')" id="modal-btn-holiday" class="modal-status-btn flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border-2 border-slate-200 hover:border-amber-400 text-xs font-bold text-slate-800 transition">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Holiday
+                        </button>
+                        <button type="button" onclick="setDateStatus(selectedDateStr, null)" id="modal-btn-none" class="modal-status-btn flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border-2 border-slate-200 hover:border-slate-400 text-xs font-bold text-slate-600 transition">
+                            <i data-lucide="eraser" class="w-3.5 h-3.5"></i> Unmarked
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1.5">Additive sync: marking adds to your current Present/Absent numbers and updates Total = Present + Absent.</p>
+                </div>
+
+                <!-- Events & Notes for Selected Date -->
+                <div class="pt-4 border-t border-slate-100 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <i data-lucide="calendar-plus" class="w-3.5 h-3.5 text-brand-600"></i>
+                            Notes & Scheduled Events
+                        </h4>
+                        <span id="modal-event-count" class="text-xs font-bold text-brand-600">0</span>
+                    </div>
+
+                    <form onsubmit="handleAddEvent(event)" class="flex flex-col sm:flex-row gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                        <input type="text" id="modal-event-title" required placeholder="Add note or event (e.g., Science Test, Sick Leave)" class="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <input type="time" id="modal-event-time" class="px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <button type="submit" class="px-3.5 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition shrink-0">
+                            + Add
+                        </button>
+                    </form>
+
+                    <div id="modal-events-list" class="space-y-2 max-h-44 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- TOP COMPACT HEADER                                                    -->
+    <!-- ===================================================================== -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand Title & Subtitle -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <i data-lucide="calendar-check-2" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-display text-base sm:text-lg font-extrabold text-slate-900 leading-tight">Attendly</h1>
+                    <p class="text-xs text-slate-500 font-medium">Attendance Maker & Interactive Calendar</p>
+                </div>
+            </div>
+
+            <!-- Right Controls: Live Auto-Saved Memory Badge & Reset All Data -->
+            <div class="flex items-center gap-2.5">
+                <div id="memory-status-pill" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-xs font-semibold">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="memory-status-text">Auto-Saved to Memory</span>
+                </div>
+
+                <button type="button" onclick="promptResetAll()" class="px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-semibold transition flex items-center gap-1.5">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    <span>Reset All Data</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ===================================================================== -->
+    <!-- MAIN UNIFIED SINGLE-SCREEN GRID (LEFT ~400PX, RIGHT FLEXIBLE)         -->
+    <!-- ===================================================================== -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 items-start">
+
+            <!-- =============================================================== -->
+            <!-- LEFT COLUMN: ATTENDANCE ENTRY, PERCENTAGE & COMPACT BACKUP      -->
+            <!-- =============================================================== -->
+            <div class="space-y-5">
+
+                <!-- A) UNIFIED ATTENDANCE ENTRY CARD -->
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div>
+                            <h2 class="font-display text-base font-extrabold text-slate-900">Attendance Entry</h2>
+                            <p class="text-[11px] text-slate-500">Direct input or additive calendar sync</p>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold">Total = P + A</span>
+                    </div>
+
+                    <!-- 1. Present Days Entering Box -->
+                    <div class="p-3.5 rounded-xl bg-emerald-50/45 border border-emerald-200/80 space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label for="input-present" class="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-emerald-900">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                Present Days
+                            </label>
+                            <div class="flex items-center gap-1">
+                                <button type="button" onclick="adjustCount('present', 1)" class="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200/80 text-emerald-800 text-[11px] font-bold transition">+1</button>
+                                <button type="button" onclick="adjustCount('present', 5)" class="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200/80 text-emerald-800 text-[11px] font-bold transition">+5</button>
+                                <button type="button" onclick="clearSingleField('present')" class="px-2 py-0.5 rounded-md bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 text-[11px] font-semibold transition">Clear</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustCount('present', -1)" class="w-10 h-11 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-100/70 text-emerald-800 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Decrease Present Days">-</button>
+                            <input type="number" id="input-present" min="0" max="99999" value="0" oninput="handleDirectInput('present', this.value)" onblur="normalizeInputOnBlur('present')" class="flex-1 min-w-0 h-11 px-3 text-center rounded-xl border-2 border-emerald-300 bg-white font-mono text-xl font-extrabold text-emerald-950 focus:outline-none focus:border-emerald-500 transition">
+                            <button type="button" onclick="adjustCount('present', 1)" class="w-10 h-11 rounded-xl border border-emerald-200 bg-white hover:bg-emerald-100/70 text-emerald-800 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Increase Present Days">+</button>
+                        </div>
+                    </div>
+
+                    <!-- 2. Absent Days Entering Box -->
+                    <div class="p-3.5 rounded-xl bg-rose-50/45 border border-rose-200/80 space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label for="input-absent" class="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-rose-900">
+                                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                Absent Days
+                            </label>
+                            <div class="flex items-center gap-1">
+                                <button type="button" onclick="adjustCount('absent', 1)" class="px-2 py-0.5 rounded-md bg-rose-100 hover:bg-rose-200/80 text-rose-800 text-[11px] font-bold transition">+1</button>
+                                <button type="button" onclick="adjustCount('absent', 5)" class="px-2 py-0.5 rounded-md bg-rose-100 hover:bg-rose-200/80 text-rose-800 text-[11px] font-bold transition">+5</button>
+                                <button type="button" onclick="clearSingleField('absent')" class="px-2 py-0.5 rounded-md bg-white hover:bg-rose-100 text-slate-600 hover:text-rose-700 border border-slate-200 text-[11px] font-semibold transition">Clear</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustCount('absent', -1)" class="w-10 h-11 rounded-xl border border-rose-200 bg-white hover:bg-rose-100/70 text-rose-800 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Decrease Absent Days">-</button>
+                            <input type="number" id="input-absent" min="0" max="99999" value="0" oninput="handleDirectInput('absent', this.value)" onblur="normalizeInputOnBlur('absent')" class="flex-1 min-w-0 h-11 px-3 text-center rounded-xl border-2 border-rose-300 bg-white font-mono text-xl font-extrabold text-rose-950 focus:outline-none focus:border-rose-500 transition">
+                            <button type="button" onclick="adjustCount('absent', 1)" class="w-10 h-11 rounded-xl border border-rose-200 bg-white hover:bg-rose-100/70 text-rose-800 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Increase Absent Days">+</button>
+                        </div>
+                    </div>
+
+                    <!-- 3. Total School Opening Days Entering Box -->
+                    <div class="p-3.5 rounded-xl bg-brand-50/45 border border-brand-200/80 space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label for="input-total" class="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-800">
+                                <span class="w-2 h-2 rounded-full bg-brand-600"></span>
+                                Total School Opening Days
+                            </label>
+                            <button type="button" onclick="syncTotalToPresentPlusAbsent(true)" id="btn-sync-total" class="px-2.5 py-0.5 rounded-md bg-brand-100 hover:bg-brand-200/80 text-brand-700 text-[11px] font-bold transition">
+                                Sync (P + A)
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustCount('total', -1)" class="w-10 h-11 rounded-xl border border-brand-200 bg-white hover:bg-brand-50 text-slate-700 hover:text-brand-700 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Decrease Total Days">-</button>
+                            <input type="number" id="input-total" min="0" max="99999" value="0" oninput="handleDirectInput('total', this.value)" onblur="normalizeInputOnBlur('total')" class="flex-1 min-w-0 h-11 px-3 text-center rounded-xl border-2 border-brand-300 bg-white font-mono text-xl font-extrabold text-slate-900 focus:outline-none focus:border-brand-600 transition">
+                            <button type="button" onclick="adjustCount('total', 1)" class="w-10 h-11 rounded-xl border border-brand-200 bg-white hover:bg-brand-50 text-slate-700 hover:text-brand-700 font-bold text-lg transition flex items-center justify-center shrink-0" aria-label="Increase Total Days">+</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- B) AUTOMATIC ATTENDANCE PERCENTAGE CARD -->
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-brand-600">Live Calculation</span>
+                            <h2 class="font-display text-base font-extrabold text-slate-900">Attendance Percentage</h2>
+                        </div>
+                        <span id="pct-status-pill" class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                            No Days
+                        </span>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <!-- Animated Circular SVG Progress Ring -->
+                        <div class="relative w-28 h-28 shrink-0 flex items-center justify-center">
+                            <svg class="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                                <circle cx="60" cy="60" r="50" stroke="#f1f5f9" stroke-width="11" fill="none" />
+                                <circle id="pct-ring-circle" cx="60" cy="60" r="50" stroke="#4f46e5" stroke-width="11" stroke-linecap="round" fill="none" stroke-dasharray="314.16" stroke-dashoffset="314.16" class="transition-all duration-300 ease-out" />
+                            </svg>
+                            <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                <span id="pct-main-text" class="font-mono text-xl font-extrabold text-slate-900">0.0%</span>
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rate</span>
+                            </div>
+                        </div>
+
+                        <!-- Breakdown Stats -->
+                        <div class="flex-1 min-w-0 space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-semibold text-emerald-700">Present: <strong id="pct-stat-present" class="font-mono">0</strong></span>
+                                <span class="font-semibold text-rose-700">Absent: <strong id="pct-stat-absent" class="font-mono">0</strong></span>
+                                <span class="font-semibold text-slate-700">Total: <strong id="pct-stat-total" class="font-mono">0</strong></span>
+                            </div>
+
+                            <!-- Present vs Absent Breakdown Bar -->
+                            <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
+                                <div id="bar-present" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+                                <div id="bar-absent" class="bg-rose-500 h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+
+                            <p id="pct-formula-text" class="font-mono text-[11px] text-slate-500">0 &divide; 0 = 0.0%</p>
+                        </div>
+                    </div>
+
+                    <!-- Concise 75% Target Guidance -->
+                    <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5">
+                        <i data-lucide="target" class="w-4 h-4 text-brand-600 shrink-0 mt-0.5"></i>
+                        <p id="target-advisor-text" class="text-xs text-slate-600 leading-relaxed">
+                            Enter Present or Absent days, or mark dates on the calendar to view your 75% target guidance.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- C) COMPACT MEMORY & BACKUP CARD -->
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="hard-drive" class="w-4 h-4 text-brand-600"></i>
+                            <span class="text-xs font-extrabold text-slate-900">Memory & Snapshots</span>
+                        </div>
+                        <span class="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70">Persistent Storage</span>
+                    </div>
+
+                    <!-- Save Snapshot Input + Button -->
+                    <form onsubmit="handleSaveSnapshot(event)" class="flex gap-1.5">
+                        <input type="text" id="snapshot-name-input" maxlength="40" placeholder="Optional snapshot label..." class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition shrink-0">
+                            Save Snapshot
+                        </button>
+                    </form>
+
+                    <!-- Compact Saved Snapshots Selector & Restore/Delete -->
+                    <div id="snapshot-bar" class="hidden items-center gap-1.5">
+                        <select id="snapshot-select" aria-label="Saved Snapshots" class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+                        <button type="button" onclick="restoreSelectedSnapshot()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition shrink-0">
+                            Restore
+                        </button>
+                        <button type="button" onclick="deleteSelectedSnapshot()" class="p-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition shrink-0" title="Delete Snapshot">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Export & Import JSON Row -->
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span class="text-[11px] text-slate-400">Backup file:</span>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="exportBackupJSON()" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-[11px] font-semibold transition flex items-center gap-1">
+                                <i data-lucide="download" class="w-3 h-3"></i>
+                                Export JSON
+                            </button>
+                            <label class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-[11px] font-semibold transition flex items-center gap-1 cursor-pointer">
+                                <i data-lucide="upload" class="w-3 h-3"></i>
+                                Import JSON
+                                <input type="file" accept=".json,application/json" onchange="importBackupJSON(event)" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- =============================================================== -->
+            <!-- RIGHT COLUMN: FULL INTERACTIVE CALENDAR APP                     -->
+            <!-- =============================================================== -->
+            <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+                <!-- Calendar Top Controls -->
+                <div class="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="navigateCalendar(-1)" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition" aria-label="Previous">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+
+                        <select id="cal-month-select" onchange="handleMonthYearChange()" aria-label="Month" class="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-display text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="0">January</option>
+                            <option value="1">February</option>
+                            <option value="2">March</option>
+                            <option value="3">April</option>
+                            <option value="4">May</option>
+                            <option value="5">June</option>
+                            <option value="6">July</option>
+                            <option value="7">August</option>
+                            <option value="8">September</option>
+                            <option value="9">October</option>
+                            <option value="10">November</option>
+                            <option value="11">December</option>
+                        </select>
+
+                        <select id="cal-year-select" onchange="handleMonthYearChange()" aria-label="Year" class="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white font-mono text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+
+                        <button type="button" onclick="navigateCalendar(1)" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition" aria-label="Next">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="jumpToToday()" class="px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200/80 text-xs font-bold transition">
+                            Today
+                        </button>
+
+                        <div class="bg-slate-100 p-1 rounded-xl flex text-xs font-semibold">
+                            <button type="button" onclick="setCalendarViewMode('month')" id="btn-view-month" class="px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-2xs transition">Month</button>
+                            <button type="button" onclick="setCalendarViewMode('week')" id="btn-view-week" class="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition">Week</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Today Bar -->
+                <div class="px-4 sm:px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-700">Today (<span id="quick-today-date-label"></span>):</span>
+                        <span id="quick-today-status" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-200/70 text-slate-600">Unmarked</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button type="button" onclick="setDateStatus(todayStr, 'present')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition">
+                            Present
+                        </button>
+                        <button type="button" onclick="setDateStatus(todayStr, 'absent')" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition">
+                            Absent
+                        </button>
+                        <button type="button" onclick="setDateStatus(todayStr, 'holiday')" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition">
+                            Holiday
+                        </button>
+                        <button type="button" onclick="setDateStatus(todayStr, null)" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold transition">
+                            Clear Today
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Weekday Headers -->
+                <div id="calendar-weekdays" class="grid grid-cols-7 border-b border-slate-100 bg-white">
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-rose-500">Sun</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Mon</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Tue</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Wed</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Thu</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Fri</div>
+                    <div class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Sat</div>
+                </div>
+
+                <!-- Interactive Calendar Grid -->
+                <div id="calendar-grid" class="grid grid-cols-7 bg-slate-100 gap-px"></div>
+
+                <!-- Monthly Summary Footer inside Calendar Card -->
+                <div class="p-4 sm:px-5 bg-slate-50/80 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="font-bold text-slate-700">Viewed Month:</span>
+                        <span class="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            Present: <strong id="month-footer-present" class="font-mono">0</strong>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 font-semibold text-rose-700">
+                            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                            Absent: <strong id="month-footer-absent" class="font-mono">0</strong>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 font-semibold text-amber-700">
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                            Holiday: <strong id="month-footer-holiday" class="font-mono">0</strong>
+                        </span>
+                    </div>
+                    <span class="text-[11px] text-slate-400">Click any date to mark status or add notes</span>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        const STORAGE_KEY = 'attendly_unified_state_v1';
+        const SNAPSHOTS_KEY = 'attendly_snapshots_v1';
+
+        const todayObj = new Date();
+        const todayStr = formatDateISO(todayObj);
+
+        let state = {
+            present: 0,
+            absent: 0,
+            total: 0,
+            calendarStatuses: {}, // { 'YYYY-MM-DD': 'present' | 'absent' | 'holiday' }
+            calendarEvents: {}    // { 'YYYY-MM-DD': [ { id, title, time } ] }
+        };
+
+        let snapshots = [];
+        let viewYear = todayObj.getFullYear();
+        let viewMonth = todayObj.getMonth();
+        let calendarViewMode = 'month';
+        let selectedDateStr = todayStr;
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            populateYearDropdown();
+            document.getElementById('quick-today-date-label').textContent = todayObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            loadState();
+            loadSnapshots();
+            syncAllUI();
+            renderSnapshotsBar();
+            lucide.createIcons();
+        });
+
+        function populateYearDropdown() {
+            const yearSelect = document.getElementById('cal-year-select');
+            const currentY = todayObj.getFullYear();
+            yearSelect.innerHTML = '';
+            for (let y = currentY - 10; y <= currentY + 10; y++) {
+                const opt = document.createElement('option');
+                opt.value = String(y);
+                opt.textContent = String(y);
+                yearSelect.appendChild(opt);
+            }
+        }
+
+        // --- Persistent localStorage Memory ---
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    state.present = Math.max(0, parseInt(parsed.present, 10) || 0);
+                    state.absent = Math.max(0, parseInt(parsed.absent, 10) || 0);
+                    state.total = typeof parsed.total === 'number' && !isNaN(parsed.total)
+                        ? Math.max(0, parseInt(parsed.total, 10))
+                        : state.present + state.absent;
+                    state.calendarStatuses = parsed.calendarStatuses && typeof parsed.calendarStatuses === 'object' ? parsed.calendarStatuses : {};
+                    state.calendarEvents = parsed.calendarEvents && typeof parsed.calendarEvents === 'object' ? parsed.calendarEvents : {};
+                }
+            } catch (e) {
+                console.error('Failed to load state from localStorage:', e);
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                document.getElementById('memory-status-text').textContent = `Auto-Saved (${timeStr})`;
+            } catch (e) {
+                console.error('Failed to save state to localStorage:', e);
+                document.getElementById('memory-status-text').textContent = 'Storage Warning';
+            }
+        }
+
+        // --- Snapshots & JSON Backup ---
+        function loadSnapshots() {
+            try {
+                const raw = localStorage.getItem(SNAPSHOTS_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) snapshots = parsed;
+                }
+            } catch (e) {
+                snapshots = [];
+            }
+        }
+
+        function persistSnapshots() {
+            try {
+                localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snapshots));
+            } catch (e) {
+                showToast('Unable to save snapshot to storage', 'info');
+            }
+        }
+
+        function handleSaveSnapshot(e) {
+            e.preventDefault();
+            const input = document.getElementById('snapshot-name-input');
+            const label = input.value.trim();
+            const now = new Date();
+            const stamp = now.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const pct = state.total > 0 ? ((state.present / state.total) * 100).toFixed(1) : '0.0';
+            const title = label ? `${label} (${state.present}P/${state.absent}A • ${pct}%)` : `Snapshot ${stamp} (${state.present}P/${state.absent}A • ${pct}%)`;
+
+            snapshots.unshift({
+                id: 'snap_' + Date.now(),
+                title,
+                data: JSON.parse(JSON.stringify(state))
+            });
+            persistSnapshots();
+            input.value = '';
+            renderSnapshotsBar();
+            showToast('Snapshot saved to memory', 'success');
+        }
+
+        function renderSnapshotsBar() {
+            const bar = document.getElementById('snapshot-bar');
+            const select = document.getElementById('snapshot-select');
+            if (snapshots.length === 0) {
+                bar.classList.add('hidden');
+                bar.classList.remove('flex');
+                return;
+            }
+            bar.classList.remove('hidden');
+            bar.classList.add('flex');
+            select.innerHTML = snapshots.map(s => `<option value="${s.id}">${escapeHTML(s.title)}</option>`).join('');
+        }
+
+        function restoreSelectedSnapshot() {
+            const id = document.getElementById('snapshot-select').value;
+            const found = snapshots.find(s => s.id === id);
+            if (!found || !found.data) return;
+
+            state = {
+                present: Math.max(0, parseInt(found.data.present, 10) || 0),
+                absent: Math.max(0, parseInt(found.data.absent, 10) || 0),
+                total: Math.max(0, parseInt(found.data.total, 10) || 0),
+                calendarStatuses: found.data.calendarStatuses ? JSON.parse(JSON.stringify(found.data.calendarStatuses)) : {},
+                calendarEvents: found.data.calendarEvents ? JSON.parse(JSON.stringify(found.data.calendarEvents)) : {}
+            };
+            saveState();
+            syncAllUI();
+            showToast('Snapshot restored', 'success');
+        }
+
+        function deleteSelectedSnapshot() {
+            const id = document.getElementById('snapshot-select').value;
+            snapshots = snapshots.filter(s => s.id !== id);
+            persistSnapshots();
+            renderSnapshotsBar();
+            showToast('Snapshot deleted', 'info');
+        }
+
+        function exportBackupJSON() {
+            const payload = {
+                app: 'Attendly',
+                exportedAt: new Date().toISOString(),
+                state,
+                snapshots
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `attendly-backup-${todayStr}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Exported JSON backup', 'success');
+        }
+
+        function importBackupJSON(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    const incoming = parsed.state || parsed;
+                    if (typeof incoming !== 'object') throw new Error('Invalid format');
+                    state = {
+                        present: Math.max(0, parseInt(incoming.present, 10) || 0),
+                        absent: Math.max(0, parseInt(incoming.absent, 10) || 0),
+                        total: Math.max(0, parseInt(incoming.total, 10) || 0),
+                        calendarStatuses: incoming.calendarStatuses || {},
+                        calendarEvents: incoming.calendarEvents || {}
+                    };
+                    if (Array.isArray(parsed.snapshots)) {
+                        snapshots = parsed.snapshots;
+                        persistSnapshots();
+                    }
+                    saveState();
+                    syncAllUI();
+                    renderSnapshotsBar();
+                    showToast('Backup imported successfully', 'success');
+                } catch (err) {
+                    showToast('Invalid JSON backup file', 'info');
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- Direct Entry & Persistent Additive Logic ---
+        function handleDirectInput(field, rawValue) {
+            if (rawValue === '') return;
+            const parsed = parseInt(rawValue, 10);
+            if (isNaN(parsed)) return;
+            const clean = Math.max(0, Math.min(99999, parsed));
+
+            if (field === 'present') {
+                state.present = clean;
+                state.total = state.present + state.absent;
+            } else if (field === 'absent') {
+                state.absent = clean;
+                state.total = state.present + state.absent;
+            } else if (field === 'total') {
+                state.total = clean;
+            }
+
+            saveState();
+            syncAllUI();
+        }
+
+        function normalizeInputOnBlur(field) {
+            const el = document.getElementById(`input-${field}`);
+            if (el.value === '' || isNaN(parseInt(el.value, 10))) {
+                el.value = state[field];
+            }
+        }
+
+        function adjustCount(field, delta) {
+            if (field === 'present') {
+                state.present = Math.max(0, state.present + delta);
+                state.total = state.present + state.absent;
+            } else if (field === 'absent') {
+                state.absent = Math.max(0, state.absent + delta);
+                state.total = state.present + state.absent;
+            } else if (field === 'total') {
+                state.total = Math.max(0, state.total + delta);
+            }
+
+            saveState();
+            syncAllUI();
+        }
+
+        function clearSingleField(field) {
+            if (field === 'present') {
+                state.present = 0;
+                state.total = state.present + state.absent;
+                showToast('Present Days cleared to 0', 'info');
+            } else if (field === 'absent') {
+                state.absent = 0;
+                state.total = state.present + state.absent;
+                showToast('Absent Days cleared to 0', 'info');
+            }
+            saveState();
+            syncAllUI();
+        }
+
+        function syncTotalToPresentPlusAbsent(notify = false) {
+            state.total = state.present + state.absent;
+            saveState();
+            syncAllUI();
+            if (notify) {
+                showToast(`Total synced to ${state.total} (${state.present} + ${state.absent})`, 'success');
+            }
+        }
+
+        function setDateStatus(dateStr, newStatus) {
+            const prevStatus = state.calendarStatuses[dateStr] || null;
+            if (prevStatus === newStatus) {
+                if (document.getElementById('date-modal').classList.contains('flex')) {
+                    renderDateModalContent();
+                }
+                return;
+            }
+
+            if (prevStatus === 'present') state.present = Math.max(0, state.present - 1);
+            else if (prevStatus === 'absent') state.absent = Math.max(0, state.absent - 1);
+
+            if (newStatus === 'present') state.present += 1;
+            else if (newStatus === 'absent') state.absent += 1;
+
+            if (newStatus === null) delete state.calendarStatuses[dateStr];
+            else state.calendarStatuses[dateStr] = newStatus;
+
+            // Total automatically updates as Present + Absent
+            state.total = state.present + state.absent;
+
+            saveState();
+            syncAllUI();
+
+            if (document.getElementById('date-modal').classList.contains('flex') && selectedDateStr === dateStr) {
+                renderDateModalContent();
+            }
+
+            const readable = formatReadableDate(dateStr);
+            if (newStatus === 'present') showToast(`${readable}: Present (Total: ${state.total})`, 'success');
+            else if (newStatus === 'absent') showToast(`${readable}: Absent (Total: ${state.total})`, 'info');
+            else if (newStatus === 'holiday') showToast(`${readable}: Holiday`, 'info');
+            else showToast(`${readable}: Unmarked`, 'info');
+        }
+
+        // --- Full UI Sync ---
+        function syncAllUI() {
+            const pInput = document.getElementById('input-present');
+            const aInput = document.getElementById('input-absent');
+            const tInput = document.getElementById('input-total');
+
+            if (document.activeElement !== pInput) pInput.value = state.present;
+            if (document.activeElement !== aInput) aInput.value = state.absent;
+            if (document.activeElement !== tInput) tInput.value = state.total;
+
+            updatePercentageCard();
+
+            // Quick Today Bar
+            const todayStatus = state.calendarStatuses[todayStr] || null;
+            const quickBadge = document.getElementById('quick-today-status');
+            if (todayStatus === 'present') {
+                quickBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800';
+                quickBadge.textContent = 'Present';
+            } else if (todayStatus === 'absent') {
+                quickBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800';
+                quickBadge.textContent = 'Absent';
+            } else if (todayStatus === 'holiday') {
+                quickBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800';
+                quickBadge.textContent = 'Holiday';
+            } else {
+                quickBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-200/70 text-slate-600';
+                quickBadge.textContent = 'Unmarked';
+            }
+
+            document.getElementById('cal-month-select').value = String(viewMonth);
+            document.getElementById('cal-year-select').value = String(viewYear);
+            renderCalendar();
+        }
+
+        function updatePercentageCard() {
+            const p = state.present;
+            const a = state.absent;
+            const tot = state.total;
+
+            const pct = tot > 0 ? (p / tot) * 100 : 0;
+            const pctFormatted = pct.toFixed(1);
+
+            document.getElementById('pct-main-text').textContent = `${pctFormatted}%`;
+            document.getElementById('pct-formula-text').textContent = `${p} ÷ ${tot} = ${pctFormatted}%`;
+            document.getElementById('pct-stat-present').textContent = p;
+            document.getElementById('pct-stat-absent').textContent = a;
+            document.getElementById('pct-stat-total').textContent = tot;
+
+            // Breakdown bar
+            const sumPA = p + a;
+            const pWidth = sumPA > 0 ? (p / sumPA) * 100 : 0;
+            const aWidth = sumPA > 0 ? (a / sumPA) * 100 : 0;
+            document.getElementById('bar-present').style.width = `${pWidth}%`;
+            document.getElementById('bar-absent').style.width = `${aWidth}%`;
+
+            // Circular ring progress (r = 50 -> circumference = 314.16)
+            const circumference = 314.16;
+            const clampedPct = Math.min(100, Math.max(0, pct));
+            const offset = circumference - (clampedPct / 100) * circumference;
+            const ring = document.getElementById('pct-ring-circle');
+            ring.style.strokeDashoffset = offset;
+
+            const statusPill = document.getElementById('pct-status-pill');
+            const advisorText = document.getElementById('target-advisor-text');
+
+            if (tot === 0) {
+                ring.style.stroke = '#94a3b8';
+                statusPill.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600';
+                statusPill.textContent = 'No Days';
+                advisorText.innerHTML = 'Enter Present or Absent days, or mark dates on the calendar to view your <strong>75%</strong> target guidance.';
+                return;
+            }
+
+            if (pct >= 85) {
+                ring.style.stroke = '#10b981';
+                statusPill.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700';
+                statusPill.textContent = 'Excellent ≥ 85%';
+                const canMiss = Math.max(0, Math.floor(p / 0.75 - tot));
+                advisorText.innerHTML = `Outstanding attendance (<strong>${pctFormatted}%</strong>)! You can miss up to <strong>${canMiss}</strong> day${canMiss === 1 ? '' : 's'} and stay ≥ <strong>75%</strong>.`;
+            } else if (pct >= 75) {
+                ring.style.stroke = '#10b981';
+                statusPill.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700';
+                statusPill.textContent = 'Good ≥ 75%';
+                const canMiss = Math.max(0, Math.floor(p / 0.75 - tot));
+                advisorText.innerHTML = canMiss > 0
+                    ? `Safe above 75% (<strong>${pctFormatted}%</strong>). Buffer: up to <strong>${canMiss}</strong> day${canMiss === 1 ? '' : 's'} can be missed.`
+                    : `Right at the <strong>75%</strong> mark (<strong>${pctFormatted}%</strong>). Attend the next day to build a buffer.`;
+            } else {
+                ring.style.stroke = '#f43f5e';
+                statusPill.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700';
+                statusPill.textContent = 'Low < 75%';
+                const needConsecutive = Math.max(1, Math.ceil(3 * tot - 4 * p));
+                advisorText.innerHTML = `Below 75% (<strong>${pctFormatted}%</strong>). Attend <strong>${needConsecutive}</strong> consecutive school day${needConsecutive === 1 ? '' : 's'} to reach <strong>75.0%</strong>.`;
+            }
+        }
+
+        // --- Calendar Navigation & Rendering ---
+        function setCalendarViewMode(mode) {
+            calendarViewMode = mode;
+            const mBtn = document.getElementById('btn-view-month');
+            const wBtn = document.getElementById('btn-view-week');
+            const headers = document.getElementById('calendar-weekdays');
+
+            if (mode === 'month') {
+                mBtn.className = 'px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-2xs transition';
+                wBtn.className = 'px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition';
+                headers.classList.remove('hidden');
+            } else {
+                wBtn.className = 'px-2.5 py-1 rounded-lg bg-white text-slate-900 shadow-2xs transition';
+                mBtn.className = 'px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition';
+                headers.classList.add('hidden');
+            }
+            renderCalendar();
+        }
+
+        function handleMonthYearChange() {
+            viewMonth = parseInt(document.getElementById('cal-month-select').value, 10);
+            viewYear = parseInt(document.getElementById('cal-year-select').value, 10);
+            renderCalendar();
+        }
+
+        function navigateCalendar(delta) {
+            if (calendarViewMode === 'month') {
+                const shifted = new Date(viewYear, viewMonth + delta, 1);
+                viewYear = shifted.getFullYear();
+                viewMonth = shifted.getMonth();
+            } else {
+                const anchor = parseDateISO(selectedDateStr);
+                const shifted = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + delta * 7);
+                selectedDateStr = formatDateISO(shifted);
+                viewYear = shifted.getFullYear();
+                viewMonth = shifted.getMonth();
+            }
+            document.getElementById('cal-month-select').value = String(viewMonth);
+            document.getElementById('cal-year-select').value = String(viewYear);
+            renderCalendar();
+        }
+
+        function jumpToToday() {
+            viewYear = todayObj.getFullYear();
+            viewMonth = todayObj.getMonth();
+            selectedDateStr = todayStr;
+            document.getElementById('cal-month-select').value = String(viewMonth);
+            document.getElementById('cal-year-select').value = String(viewYear);
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+
+            // Monthly Summary Footer Counts
+            const monthPrefix = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`;
+            let mPresent = 0, mAbsent = 0, mHoliday = 0;
+            Object.entries(state.calendarStatuses).forEach(([dStr, st]) => {
+                if (dStr.startsWith(monthPrefix)) {
+                    if (st === 'present') mPresent++;
+                    else if (st === 'absent') mAbsent++;
+                    else if (st === 'holiday') mHoliday++;
+                }
+            });
+            document.getElementById('month-footer-present').textContent = mPresent;
+            document.getElementById('month-footer-absent').textContent = mAbsent;
+            document.getElementById('month-footer-holiday').textContent = mHoliday;
+
+            if (calendarViewMode === 'week') {
+                grid.className = 'divide-y divide-slate-100 bg-white';
+                const anchor = parseDateISO(selectedDateStr);
+                const sunday = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - anchor.getDay());
+
+                for (let i = 0; i < 7; i++) {
+                    const dt = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
+                    const dStr = formatDateISO(dt);
+                    const status = state.calendarStatuses[dStr] || null;
+                    const events = state.calendarEvents[dStr] || [];
+                    const isToday = dStr === todayStr;
+
+                    const row = document.createElement('div');
+                    row.onclick = () => openDateModal(dStr);
+                    row.className = 'p-3.5 hover:bg-slate-50 cursor-pointer transition flex items-center justify-between gap-3';
+
+                    let badge = `<span class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500">Unmarked</span>`;
+                    if (status === 'present') badge = `<span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500 text-white">Present</span>`;
+                    if (status === 'absent') badge = `<span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-rose-500 text-white">Absent</span>`;
+                    if (status === 'holiday') badge = `<span class="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-500 text-white">Holiday</span>`;
+
+                    const evHtml = events.map(ev =>
+                        `<span class="inline-block px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200/70 text-[11px] font-semibold">${ev.time ? ev.time + ' ' : ''}${escapeHTML(ev.title)}</span>`
+                    ).join(' ');
+
+                    row.innerHTML = `
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-10 h-10 rounded-xl flex flex-col items-center justify-center font-bold shrink-0 ${isToday ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}">
+                                <span class="text-[10px] uppercase leading-none">${dt.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                                <span class="text-sm leading-tight font-mono">${dt.getDate()}</span>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-bold text-slate-900">${formatReadableDate(dStr)}</span>
+                                    ${badge}
+                                </div>
+                                ${evHtml ? `<div class="flex flex-wrap gap-1 mt-1">${evHtml}</div>` : ''}
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 shrink-0"></i>
+                    `;
+                    grid.appendChild(row);
+                }
+                lucide.createIcons();
+                return;
+            }
+
+            // Month Grid
+            grid.className = 'grid grid-cols-7 bg-slate-100 gap-px';
+            const firstDay = new Date(viewYear, viewMonth, 1);
+            const lastDay = new Date(viewYear, viewMonth + 1, 0);
+            const startDow = firstDay.getDay();
+            const daysInMonth = lastDay.getDate();
+
+            const cells = [];
+            const prevMonthLastDate = new Date(viewYear, viewMonth, 0).getDate();
+            for (let i = startDow - 1; i >= 0; i--) {
+                cells.push({ date: new Date(viewYear, viewMonth - 1, prevMonthLastDate - i), currentMonth: false });
+            }
+            for (let d = 1; d <= daysInMonth; d++) {
+                cells.push({ date: new Date(viewYear, viewMonth, d), currentMonth: true });
+            }
+            const totalSlots = cells.length <= 35 ? 35 : 42;
+            let nextDay = 1;
+            while (cells.length < totalSlots) {
+                cells.push({ date: new Date(viewYear, viewMonth + 1, nextDay++), currentMonth: false });
+            }
+
+            cells.forEach(item => {
+                const dStr = formatDateISO(item.date);
+                const status = state.calendarStatuses[dStr] || null;
+                const events = state.calendarEvents[dStr] || [];
+                const isToday = dStr === todayStr;
+                const isSunday = item.date.getDay() === 0;
+
+                let cellBg = item.currentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-100/70';
+                let statusPill = '';
+
+                if (status === 'present') {
+                    cellBg = item.currentMonth ? 'bg-emerald-50/80 hover:bg-emerald-100/60' : 'bg-emerald-50/40';
+                    statusPill = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-white"><span class="w-1 h-1 rounded-full bg-white"></span>Present</span>`;
+                } else if (status === 'absent') {
+                    cellBg = item.currentMonth ? 'bg-rose-50/80 hover:bg-rose-100/60' : 'bg-rose-50/40';
+                    statusPill = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white"><span class="w-1 h-1 rounded-full bg-white"></span>Absent</span>`;
+                } else if (status === 'holiday') {
+                    cellBg = item.currentMonth ? 'bg-amber-50/80 hover:bg-amber-100/60' : 'bg-amber-50/40';
+                    statusPill = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white"><span class="w-1 h-1 rounded-full bg-white"></span>Holiday</span>`;
+                }
+
+                const eventTag = events[0]
+                    ? `<p class="text-[10px] font-semibold text-brand-800 bg-brand-50 border border-brand-200/70 px-1.5 py-0.5 rounded truncate">${escapeHTML(events[0].title)}${events.length > 1 ? ` +${events.length - 1}` : ''}</p>`
+                    : '';
+
+                const cell = document.createElement('div');
+                cell.onclick = () => openDateModal(dStr);
+                cell.className = `${cellBg} min-h-[78px] sm:min-h-[90px] p-1.5 sm:p-2 cursor-pointer transition flex flex-col justify-between select-none`;
+
+                cell.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-bold ${
+                            isToday
+                                ? 'bg-brand-600 text-white shadow-2xs'
+                                : isSunday && item.currentMonth
+                                    ? 'text-rose-500'
+                                    : item.currentMonth ? 'text-slate-800' : 'text-slate-400'
+                        }">${item.date.getDate()}</span>
+                    </div>
+                    <div class="mt-1 space-y-1 overflow-hidden">
+                        ${statusPill}
+                        ${eventTag}
+                    </div>
+                `;
+                grid.appendChild(cell);
+            });
+        }
+
+        // --- Date Editor Modal & Events ---
+        function openDateModal(dateStr) {
+            selectedDateStr = dateStr;
+            renderDateModalContent();
+            const modal = document.getElementById('date-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeDateModal() {
+            const modal = document.getElementById('date-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function renderDateModalContent() {
+            const dStr = selectedDateStr;
+            const status = state.calendarStatuses[dStr] || null;
+            const events = state.calendarEvents[dStr] || [];
+
+            const dt = parseDateISO(dStr);
+            const dayName = dt.toLocaleDateString('en-US', { weekday: 'long' });
+            document.getElementById('modal-date-title').textContent = `${dayName}, ${formatReadableDate(dStr)}`;
+            document.getElementById('modal-date-iso').textContent = dStr;
+
+            const badge = document.getElementById('modal-current-badge');
+            if (status === 'present') {
+                badge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800';
+                badge.textContent = 'Present';
+            } else if (status === 'absent') {
+                badge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800';
+                badge.textContent = 'Absent';
+            } else if (status === 'holiday') {
+                badge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800';
+                badge.textContent = 'Holiday';
+            } else {
+                badge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-600';
+                badge.textContent = 'Unmarked';
+            }
+
+            document.querySelectorAll('.modal-status-btn').forEach(btn => {
+                btn.classList.remove('border-emerald-500', 'bg-emerald-50', 'border-rose-500', 'bg-rose-50', 'border-amber-500', 'bg-amber-50', 'border-slate-500', 'bg-slate-100');
+                btn.classList.add('border-slate-200');
+            });
+
+            if (status === 'present') {
+                const b = document.getElementById('modal-btn-present');
+                b.classList.remove('border-slate-200');
+                b.classList.add('border-emerald-500', 'bg-emerald-50');
+            } else if (status === 'absent') {
+                const b = document.getElementById('modal-btn-absent');
+                b.classList.remove('border-slate-200');
+                b.classList.add('border-rose-500', 'bg-rose-50');
+            } else if (status === 'holiday') {
+                const b = document.getElementById('modal-btn-holiday');
+                b.classList.remove('border-slate-200');
+                b.classList.add('border-amber-500', 'bg-amber-50');
+            } else {
+                const b = document.getElementById('modal-btn-none');
+                b.classList.remove('border-slate-200');
+                b.classList.add('border-slate-500', 'bg-slate-100');
+            }
+
+            document.getElementById('modal-event-count').textContent = `${events.length}`;
+            const listEl = document.getElementById('modal-events-list');
+            if (events.length === 0) {
+                listEl.innerHTML = `<p class="text-xs text-slate-400 italic">No notes or events added for this date.</p>`;
+            } else {
+                listEl.innerHTML = events.map(ev => `
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-800 truncate">${escapeHTML(ev.title)}</p>
+                            ${ev.time ? `<span class="text-[11px] font-mono text-slate-500">${escapeHTML(ev.time)}</span>` : ''}
+                        </div>
+                        <button type="button" onclick="deleteEvent('${dStr}', '${ev.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0" title="Delete Note">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                `).join('');
+            }
+            lucide.createIcons();
+        }
+
+        function handleAddEvent(e) {
+            e.preventDefault();
+            const titleInput = document.getElementById('modal-event-title');
+            const timeInput = document.getElementById('modal-event-time');
+            const title = titleInput.value.trim();
+            const time = timeInput.value;
+            if (!title) return;
+
+            if (!state.calendarEvents[selectedDateStr]) {
+                state.calendarEvents[selectedDateStr] = [];
+            }
+            state.calendarEvents[selectedDateStr].push({
+                id: 'ev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                title,
+                time
+            });
+
+            titleInput.value = '';
+            timeInput.value = '';
+            saveState();
+            renderCalendar();
+            renderDateModalContent();
+            showToast('Note added to ' + formatReadableDate(selectedDateStr), 'success');
+        }
+
+        function deleteEvent(dateStr, eventId) {
+            if (!state.calendarEvents[dateStr]) return;
+            state.calendarEvents[dateStr] = state.calendarEvents[dateStr].filter(ev => ev.id !== eventId);
+            if (state.calendarEvents[dateStr].length === 0) {
+                delete state.calendarEvents[dateStr];
+            }
+            saveState();
+            renderCalendar();
+            renderDateModalContent();
+            showToast('Note removed', 'info');
+        }
+
+        // --- Reset All Data & Helpers ---
+        function promptResetAll() {
+            document.getElementById('confirm-title').textContent = 'Reset All Data?';
+            document.getElementById('confirm-message').textContent =
+                'This will reset Present Days, Absent Days, Total School Opening Days, and all Calendar marks and notes to 0. Are you sure?';
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            document.getElementById('confirm-ok-btn').onclick = () => {
+                closeConfirmModal();
+                state = {
+                    present: 0,
+                    absent: 0,
+                    total: 0,
+                    calendarStatuses: {},
+                    calendarEvents: {}
+                };
+                saveState();
+                syncAllUI();
+                showToast('All data reset to 0', 'info');
+            };
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function formatDateISO(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function parseDateISO(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        function formatReadableDate(dateStr) {
+            return parseDateISO(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const borderColor = type === 'success' ? 'border-emerald-500' : 'border-brand-500';
+            toast.className = `bg-slate-900 text-white border-l-4 ${borderColor} px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold pointer-events-auto transition-all duration-300 translate-y-2 opacity-0`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => toast.classList.remove('translate-y-2', 'opacity-0'));
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
